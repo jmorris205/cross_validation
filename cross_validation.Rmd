@@ -76,3 +76,114 @@ rmse(smooth_mod, test_df)
 rmse(wiggle_mod, test_df)
 ```
 
+## Repeat:
+```{r}
+cv_df = 
+  crossv_mc(lidar_df, 100) |> 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)
+  ) 
+```
+
+
+
+
+
+
+## Lets fit models and get RMSE:
+
+```{r}
+cv_df = 
+  cv_df |> 
+  mutate(
+    linear_fit = map(train, \(df) lm(logratio ~ range, data = df)),
+    smooth_fit = map(train, \(df) gam(logratio ~ s(range), data = df)),
+    wiggle_fit = map(train, \(df) gam(logratio ~ s(range, k = 30), sp = 10e-6, data = df))
+    ) |> 
+  mutate(
+    rmse_linear = map2_dbl(linear_fit, test, rmse),
+    rmse_smooth = map2_dbl(smooth_fit, test, rmse),
+    rmse_wiggle = map2_dbl(wiggle_fit, test, rmse)
+  )
+  
+```
+
+## Look:
+```{r}
+cv_df |> 
+  select(starts_with("rmse_")) |> 
+  pivot_longer(cols = starts_with("rmse_"),
+               names_to = "model",
+               names_prefix = "rmse_",
+               values_to = "rmse") |> 
+  ggplot(aes(x = model, y = rmse)) +
+  geom_violin()
+```
+
+
+## Child growth:
+```{r}
+growth_df = 
+  read_csv("https://p8105.com/data/nepalese_children.csv") |> 
+  mutate(
+    weight_ch7 = (weight > 7) * (weight - 7)
+  )
+```
+
+
+## Look at data:
+```{r}
+growth_df
+
+growth_df |> 
+  ggplot(aes(x = weight, y = armc)) +
+  geom_point(alpha = .5) 
+```
+
+```{r}
+linear_fit = lm(armc ~ weight, data = growth_df)
+smooth_fit = gam(armc ~ s(weight), data = growth_df)
+pwl_fit = lm(armc ~ weight + weight_ch7 , data = growth_df)
+
+growth_df |> 
+  add_predictions(smooth_fit) |> 
+  ggplot(aes(x = weight, y = armc)) +
+  geom_point(alpha = 0.5) +
+  geom_line(aes(y = pred), color = "red")
+  
+```
+
+```{r}
+cv_df = 
+  crossv_mc(growth_df, 100) |> 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)
+  ) 
+
+cv_df = 
+  cv_df |> 
+  mutate(
+    linear_fit = map(train, \(df) lm(armc ~ weight, data = df)),
+    smooth_fit = map(train, \(df) gam(armc ~ s(weight), data = df)),
+    pwl_fit = map(train, \(df) lm(armc ~ weight + weight_ch7, data = df))
+    ) |> 
+  mutate(
+    rmse_linear = map2_dbl(linear_fit, test, rmse),
+    rmse_smooth = map2_dbl(smooth_fit, test, rmse),
+    rmse_pwl = map2_dbl(pwl_fit, test, rmse)
+  )
+
+```
+```{r}
+cv_df |> 
+  select(starts_with("rmse_")) |> 
+  pivot_longer(cols = starts_with("rmse_"),
+               names_to = "model",
+               names_prefix = "rmse_",
+               values_to = "rmse") |> 
+  ggplot(aes(x = model, y = rmse)) +
+  geom_violin()
+```
+
